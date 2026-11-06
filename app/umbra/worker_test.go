@@ -6,32 +6,11 @@ import (
 	"io"
 	"math"
 	"testing"
-	"time"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/serial"
 )
-
-func TestShadowBytes(t *testing.T) {
-	cases := []struct {
-		delta  int64
-		factor float64
-		want   int64
-	}{
-		{100, 1.2, 20},
-		{100, 1.0, 0},
-		{100, 0.8, 0},
-		{0, 1.5, 0},
-		{-5, 1.5, 0},
-		{3, 1.5, 2}, // 1.5 rounds to 2
-	}
-	for _, c := range cases {
-		if got := ShadowBytes(c.delta, c.factor); got != c.want {
-			t.Fatalf("ShadowBytes(%d, %v) = %d, want %d", c.delta, c.factor, got, c.want)
-		}
-	}
-}
 
 func TestFactorValidation(t *testing.T) {
 	for factor, valid := range map[float64]bool{
@@ -55,6 +34,15 @@ func TestFactorValidation(t *testing.T) {
 type collectWriter struct {
 	frames [][]byte
 }
+
+// Counter is a minimal stats.Counter for tests.
+type Counter struct {
+	value int64
+}
+
+func (c *Counter) Value() int64      { return c.value }
+func (c *Counter) Set(v int64) int64 { old := c.value; c.value = v; return old }
+func (c *Counter) Add(v int64) int64 { old := c.value; c.value += v; return old }
 
 func (w *collectWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	var raw bytes.Buffer
@@ -89,13 +77,17 @@ func parseFrame(t *testing.T, raw []byte) (mux.FrameMetadata, []byte) {
 
 func TestShadowWriterDeliversDiscardableFrames(t *testing.T) {
 	w := &collectWriter{}
-	sw := NewShadowWriter(w)
+	counted := &Counter{}
+	sw := NewShadowWriter(w, counted)
 	total := int64(shadowFrameSize*2 + 100)
 	if err := sw.Deliver(total); err != nil {
 		t.Fatal(err)
 	}
 	if len(w.frames) != 3 {
 		t.Fatalf("got %d frames, want 3", len(w.frames))
+	}
+	if counted.Value() != total {
+		t.Fatalf("counter = %d, want %d", counted.Value(), total)
 	}
 
 	seen := int64(0)
@@ -119,55 +111,11 @@ func TestShadowWriterDeliversDiscardableFrames(t *testing.T) {
 
 func TestShadowWriterEmptyIsNoop(t *testing.T) {
 	w := &collectWriter{}
-	if err := NewShadowWriter(w).Deliver(0); err != nil {
+	if err := NewShadowWriter(w, nil).Deliver(0); err != nil {
 		t.Fatal(err)
 	}
 	if len(w.frames) != 0 {
 		t.Fatalf("got %d frames, want 0", len(w.frames))
-	}
-}
-
-func TestWorkerTickInjectsDeltaOnly(t *testing.T) {
-	w := &collectWriter{}
-	real := &Counter{}
-	shadow := &Counter{}
-	worker := &Worker{Factor: 2.0, Real: real, Writer: NewShadowWriter(w), ShadowCounter: shadow}
-
-	real.Add(100)
-	if !worker.Tick() {
-		t.Fatal("tick failed")
-	}
-	if shadow.Value() != 100 {
-		t.Fatalf("shadow counter = %d, want 100", shadow.Value())
-	}
-
-	// No new real bytes: no new shadow.
-	if !worker.Tick() {
-		t.Fatal("tick failed")
-	}
-	if shadow.Value() != 100 {
-		t.Fatalf("shadow counter = %d, want 100 after idle tick", shadow.Value())
-	}
-
-	// History from before the worker started must not be re-injected: only
-	// the delta since the previous tick counts.
-	real.Add(50)
-	if !worker.Tick() {
-		t.Fatal("tick failed")
-	}
-	if shadow.Value() != 150 {
-		t.Fatalf("shadow counter = %d, want 150", shadow.Value())
-	}
-	if len(w.frames) != 2 {
-		t.Fatalf("got %d frames, want 2", len(w.frames))
-	}
-}
-
-func TestWorkerTickStopsOnWriteError(t *testing.T) {
-	worker := &Worker{Factor: 2.0, Real: &Counter{}, Writer: NewShadowWriter(&failingWriter{})}
-	worker.Real.Add(10)
-	if worker.Tick() {
-		t.Fatal("tick should stop after a delivery error")
 	}
 }
 
@@ -176,34 +124,91 @@ type failingWriter struct{}
 func (w *failingWriter) WriteMultiBuffer(buf.MultiBuffer) error { return io.ErrClosedPipe }
 func (w *failingWriter) Close() error                           { return nil }
 
-func TestRunStopsWhenStepReturnsFalse(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+type sliceReader struct {
+	mb buf.MultiBuffer
+}
 
-	calls := 0
-	Run(ctx, 10*time.Millisecond, func() bool {
-		calls++
-		return calls < 3
-	})
+func (r *sliceReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if len(r.mb) == 0 {
+		return nil, io.EOF
+	}
+	mb := r.mb
+	r.mb = nil
+	return mb, nil
+}
 
-	if calls != 3 {
-		t.Fatalf("expected 3 ticks, got %d", calls)
+func readAll(t *testing.T, r buf.Reader) int64 {
+	t.Helper()
+	var total int64
+	for {
+		mb, err := r.ReadMultiBuffer()
+		total += int64(mb.Len())
+		if err != nil {
+			return total
+		}
 	}
 }
 
-func TestRunStopsOnContextCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+// deliveredBytes sums the payload of all shadow frames collected so far.
+func deliveredBytes(t *testing.T, w *collectWriter) int64 {
+	t.Helper()
+	var total int64
+	for _, raw := range w.frames {
+		_, payload := parseFrame(t, raw)
+		total += int64(len(payload))
+	}
+	return total
+}
 
-	done := make(chan struct{})
-	go func() {
-		Run(ctx, 10*time.Millisecond, func() bool { return true })
-		close(done)
-	}()
+func TestDeliveryInjectsProportionally(t *testing.T) {
+	for _, factor := range []float64{1.2, 1.5, 2.0} {
+		w := &collectWriter{}
+		d := NewDelivery(context.Background(), factor, nil)
+		d.SetSink(w)
 
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("Run did not stop on cancelled context")
+		writer := d.WrapWriter(&collectWriter{})
+		for i := 0; i < 5; i++ {
+			if err := writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(make([]byte, 1000))}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		reader := d.WrapReader(&sliceReader{mb: buf.MultiBuffer{buf.FromBytes(make([]byte, 2000))}})
+		readAll(t, reader)
+
+		real := int64(5*1000 + 2000)
+		want := int64(math.Round(float64(real) * (factor - 1.0)))
+		if got := deliveredBytes(t, w); got != want {
+			t.Fatalf("factor %v: delivered %d shadow bytes, want %d", factor, got, want)
+		}
+	}
+}
+
+func TestDeliverySetSinkLateFlushesOwed(t *testing.T) {
+	w := &collectWriter{}
+	d := NewDelivery(context.Background(), 2.0, nil)
+	writer := d.WrapWriter(&collectWriter{})
+	if err := writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(make([]byte, 4000))}); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.frames) != 0 {
+		t.Fatal("no shadow may be delivered before the sink is attached")
+	}
+
+	d.SetSink(w)
+	if got := deliveredBytes(t, w); got != 4000 {
+		t.Fatalf("delivered %d shadow bytes, want 4000", got)
+	}
+}
+
+func TestDeliverySinkErrorNeverBreaksRealTraffic(t *testing.T) {
+	d := NewDelivery(context.Background(), 2.0, nil)
+	d.SetSink(&failingWriter{})
+
+	writer := d.WrapWriter(&collectWriter{})
+	if err := writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(make([]byte, 4000))}); err != nil {
+		t.Fatalf("real write must succeed even when shadow delivery fails: %v", err)
+	}
+	if err := writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(make([]byte, 4000))}); err != nil {
+		t.Fatalf("real write must succeed after shadow delivery failed: %v", err)
 	}
 }

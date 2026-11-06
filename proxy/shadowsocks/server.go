@@ -239,17 +239,14 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	// Shadow bytes are delivered as mux frames that the client discards; other
 	// request types have no such channel and would corrupt the application
 	// stream.
-	var realBytes *umbra.Counter
+	var delivery *umbra.Delivery
 	var shadowBody func(buf.Writer)
 	if umbra.Active(s.umbra) {
 		if !mux.IsMuxCool(dest) {
 			return errors.New("umbra: this inbound only accepts mux connections")
 		}
-		realBytes = new(umbra.Counter)
-		factor := s.umbra.GetFactor()
-		shadowBody = func(inject buf.Writer) {
-			umbra.StartWorker(ctx, factor, s.stats, realBytes, inject)
-		}
+		delivery = umbra.NewDelivery(ctx, s.umbra.GetFactor(), s.stats)
+		shadowBody = delivery.SetSink
 	}
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -270,8 +267,9 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	if err != nil {
 		return err
 	}
-	if realBytes != nil {
-		link.Reader, link.Writer = umbra.Count(realBytes, link.Reader, link.Writer)
+	if delivery != nil {
+		link.Reader = delivery.WrapReader(link.Reader)
+		link.Writer = delivery.WrapWriter(link.Writer)
 	}
 
 	responseDone := func() error {

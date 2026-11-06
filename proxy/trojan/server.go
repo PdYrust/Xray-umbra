@@ -249,10 +249,11 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		if !mux.IsMuxCool(destination) {
 			return errors.New("umbra: this inbound only accepts mux connections")
 		}
-		realBytes := new(umbra.Counter)
 		locked := umbra.NewLockedWriter(writer)
-		reader, writer = umbra.Count(realBytes, reader, locked)
-		umbra.StartWorker(ctx, s.umbra.GetFactor(), s.stats, realBytes, locked)
+		delivery := umbra.NewDelivery(ctx, s.umbra.GetFactor(), s.stats)
+		delivery.SetSink(locked)
+		reader = delivery.WrapReader(reader)
+		writer = delivery.WrapWriter(locked)
 	}
 
 	if destination.Network == net.Network_UDP { // handle udp request

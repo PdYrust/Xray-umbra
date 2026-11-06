@@ -637,10 +637,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if request.Command != protocol.RequestCommandMux {
 			return errors.New("umbra: this inbound only accepts mux connections")
 		}
-		realBytes := new(umbra.Counter)
 		locked := umbra.NewLockedWriter(clientWriter)
-		clientReader, clientWriter = umbra.Count(realBytes, clientReader, locked)
-		umbra.StartWorker(ctx, h.umbra.GetFactor(), h.stats, realBytes, locked)
+		delivery := umbra.NewDelivery(ctx, h.umbra.GetFactor(), h.stats)
+		delivery.SetSink(locked)
+		clientReader = delivery.WrapReader(clientReader)
+		clientWriter = delivery.WrapWriter(locked)
 	}
 
 	if err := dispatch.DispatchLink(

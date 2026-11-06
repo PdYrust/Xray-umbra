@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/xtls/xray-core/app/umbra"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -31,9 +32,8 @@ type VLessInboundFallback struct {
 }
 
 type VLessInboundUmbraConfig struct {
-	Enabled      bool    `json:"enabled"`
-	Factor       float64 `json:"factor"`
-	BlackholeTag string  `json:"blackholeTag"`
+	Enabled bool     `json:"enabled"`
+	Factor  *float64 `json:"factor"`
 }
 
 type VLessInboundConfig struct {
@@ -219,17 +219,19 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Umbra != nil {
-		factor := c.Umbra.Factor
-		if factor == 0 {
-			factor = 1.0
+		factor := 1.0
+		if c.Umbra.Factor != nil {
+			factor = *c.Umbra.Factor
 		}
-		if factor < 1.0 || factor > 2.0 {
+		if !umbra.ValidFactor(factor) {
 			return nil, errors.New("invalid umbra factor: must be between 1.0 and 2.0")
 		}
+		if c.Umbra.Enabled && !umbra.ActiveFactor(factor) {
+			return nil, errors.New("umbra factor must be greater than 1.0 when enabled")
+		}
 		config.Umbra = &inbound.UmbraConfig{
-			Enabled:      c.Umbra.Enabled,
-			Factor:       factor,
-			BlackholeTag: c.Umbra.BlackholeTag,
+			Enabled: c.Umbra.Enabled,
+			Factor:  factor,
 		}
 	}
 	return config, nil

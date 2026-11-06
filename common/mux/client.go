@@ -186,6 +186,12 @@ var (
 	muxCoolPort    = net.Port(9527)
 )
 
+// IsMuxCool reports whether dest marks a mux.cool session: the target a mux
+// client dials through the underlying proxy.
+func IsMuxCool(dest net.Destination) bool {
+	return dest.Address == muxCoolAddress
+}
+
 // NewClientWorker creates a new mux.Client.
 func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {
 	c := &ClientWorker{

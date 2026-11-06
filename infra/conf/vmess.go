@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/xtls/xray-core/app/umbra"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -55,15 +56,14 @@ func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 }
 
 type VMessInboundUmbraConfig struct {
-	Enabled      bool    `json:"enabled"`
-	Factor       float64 `json:"factor"`
-	BlackholeTag string  `json:"blackholeTag"`
+	Enabled bool     `json:"enabled"`
+	Factor  *float64 `json:"factor"`
 }
 
 type VMessInboundConfig struct {
-	Users    []json.RawMessage     `json:"users"`
-	Clients  []json.RawMessage     `json:"clients"`
-	Defaults *VMessDefaultConfig   `json:"default"`
+	Users    []json.RawMessage        `json:"users"`
+	Clients  []json.RawMessage        `json:"clients"`
+	Defaults *VMessDefaultConfig      `json:"default"`
 	Umbra    *VMessInboundUmbraConfig `json:"umbra"`
 }
 
@@ -107,17 +107,19 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Umbra != nil {
-		factor := c.Umbra.Factor
-		if factor == 0 {
-			factor = 1.0
+		factor := 1.0
+		if c.Umbra.Factor != nil {
+			factor = *c.Umbra.Factor
 		}
-		if factor < 1.0 || factor > 2.0 {
+		if !umbra.ValidFactor(factor) {
 			return nil, errors.New("invalid umbra factor: must be between 1.0 and 2.0")
 		}
+		if c.Umbra.Enabled && !umbra.ActiveFactor(factor) {
+			return nil, errors.New("umbra factor must be greater than 1.0 when enabled")
+		}
 		config.Umbra = &inbound.UmbraConfig{
-			Enabled:      c.Umbra.Enabled,
-			Factor:       factor,
-			BlackholeTag: c.Umbra.BlackholeTag,
+			Enabled: c.Umbra.Enabled,
+			Factor:  factor,
 		}
 	}
 

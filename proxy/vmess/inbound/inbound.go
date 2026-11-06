@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/app/umbra"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -21,6 +22,7 @@ import (
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -107,7 +109,8 @@ type Handler struct {
 	clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
 	sessionHistory        *encoding.SessionHistory
-	umbra                 *UmbraConfig
+	stats                 stats.Manager
+	umbra                 umbra.Config
 }
 
 // New creates a new VMess inbound handler.
@@ -119,7 +122,10 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		clients:               vmess.NewTimedUserValidator(),
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
-		umbra:                 config.Umbra,
+		stats:                 v.GetFeature(stats.ManagerType()).(stats.Manager),
+	}
+	if config.Umbra != nil {
+		handler.umbra = config.Umbra
 	}
 
 	for _, user := range config.User {
@@ -146,18 +152,7 @@ func (h *Handler) Close() error {
 
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
-	return []net.Network{net.Network_TCP, net.Network_UDP, net.Network_UNIX}
-}
-
-// umbraEnabled reports whether umbra traffic is allowed on this inbound.
-func (h *Handler) umbraEnabled() bool {
-	if h.umbra == nil {
-		return true
-	}
-	if !h.umbra.Enabled {
-		return false
-	}
-	return h.umbra.Factor >= 1.0 && h.umbra.Factor <= 2.0
+	return []net.Network{net.Network_TCP, net.Network_UNIX}
 }
 
 func (h *Handler) GetOrGenerateUser(email string) *protocol.MemoryUser {
@@ -198,12 +193,17 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	return nil
 }
 
-func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSession, request *protocol.RequestHeader, response *protocol.ResponseHeader, input buf.Reader, output *buf.BufferedWriter) error {
+func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSession, request *protocol.RequestHeader, response *protocol.ResponseHeader, input buf.Reader, output *buf.BufferedWriter, shadowBody func(buf.Writer)) error {
 	session.EncodeResponseHeader(response, output)
 
 	bodyWriter, err := session.EncodeResponseBody(request, output)
 	if err != nil {
 		return errors.New("failed to start decoding response").Base(err)
+	}
+	if shadowBody != nil {
+		locked := umbra.NewLockedWriter(bodyWriter)
+		bodyWriter = locked
+		shadowBody(locked)
 	}
 	{
 		// Optimize for small response packet
@@ -238,8 +238,8 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
-	if !h.umbraEnabled() {
-		return errors.New("umbra: inbound disabled")
+	if err := umbra.Gate(h.umbra); err != nil {
+		return err
 	}
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
@@ -294,10 +294,29 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 
+	// Shadow bytes are delivered as mux frames that the client discards; other
+	// request types have no such channel and would corrupt the application
+	// stream.
+	var realBytes *umbra.Counter
+	var shadowBody func(buf.Writer)
+	if umbra.Active(h.umbra) {
+		if request.Command != protocol.RequestCommandMux {
+			return errors.New("umbra: this inbound only accepts mux connections")
+		}
+		realBytes = new(umbra.Counter)
+		factor := h.umbra.GetFactor()
+		shadowBody = func(inject buf.Writer) {
+			umbra.StartWorker(ctx, factor, h.stats, realBytes, inject)
+		}
+	}
+
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, request.Destination())
 	if err != nil {
 		return errors.New("failed to dispatch request to ", request.Destination()).Base(err)
+	}
+	if realBytes != nil {
+		link.Reader, link.Writer = umbra.Count(realBytes, link.Reader, link.Writer)
 	}
 
 	requestDone := func() error {
@@ -322,7 +341,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		response := &protocol.ResponseHeader{
 			Command: h.generateCommand(ctx, request),
 		}
-		return transferResponse(timer, svrSession, request, response, link.Reader, writer)
+		return transferResponse(timer, svrSession, request, response, link.Reader, writer, shadowBody)
 	}
 
 	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))

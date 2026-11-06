@@ -4,10 +4,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/xtls/xray-core/app/umbra"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
@@ -17,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
@@ -26,6 +29,8 @@ type Server struct {
 	validator     *Validator
 	policyManager policy.Manager
 	cone          bool
+	stats         stats.Manager
+	umbra         umbra.Config
 }
 
 // NewServer create a new Shadowsocks server.
@@ -48,6 +53,10 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+		stats:         v.GetFeature(stats.ManagerType()).(stats.Manager),
+	}
+	if config.Umbra != nil {
+		s.umbra = config.Umbra
 	}
 
 	return s, nil
@@ -86,20 +95,9 @@ func (s *Server) Network() []net.Network {
 	return list
 }
 
-// umbraEnabled reports whether umbra traffic is allowed on this inbound.
-func (s *Server) umbraEnabled() bool {
-	if s.config == nil || s.config.Umbra == nil {
-		return true
-	}
-	if !s.config.Umbra.Enabled {
-		return false
-	}
-	return s.config.Umbra.Factor >= 1.0 && s.config.Umbra.Factor <= 2.0
-}
-
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	if !s.umbraEnabled() {
-		return errors.New("umbra: inbound disabled")
+	if err := umbra.Gate(s.umbra); err != nil {
+		return err
 	}
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks"
@@ -237,6 +235,23 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	inbound.User = request.User
 
 	dest := request.Destination()
+
+	// Shadow bytes are delivered as mux frames that the client discards; other
+	// request types have no such channel and would corrupt the application
+	// stream.
+	var realBytes *umbra.Counter
+	var shadowBody func(buf.Writer)
+	if umbra.Active(s.umbra) {
+		if !mux.IsMuxCool(dest) {
+			return errors.New("umbra: this inbound only accepts mux connections")
+		}
+		realBytes = new(umbra.Counter)
+		factor := s.umbra.GetFactor()
+		shadowBody = func(inject buf.Writer) {
+			umbra.StartWorker(ctx, factor, s.stats, realBytes, inject)
+		}
+	}
+
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   conn.RemoteAddr(),
 		To:     dest,
@@ -255,6 +270,9 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	if err != nil {
 		return err
 	}
+	if realBytes != nil {
+		link.Reader, link.Writer = umbra.Count(realBytes, link.Reader, link.Writer)
+	}
 
 	responseDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
@@ -263,6 +281,11 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 		responseWriter, err := WriteTCPResponse(request, bufferedWriter)
 		if err != nil {
 			return errors.New("failed to write response").Base(err)
+		}
+		if shadowBody != nil {
+			locked := umbra.NewLockedWriter(responseWriter)
+			responseWriter = locked
+			shadowBody(locked)
 		}
 
 		{

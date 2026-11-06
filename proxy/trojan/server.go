@@ -7,10 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/app/umbra"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
@@ -21,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -39,7 +42,8 @@ type Server struct {
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
 	cone          bool
-	umbra         *UmbraConfig
+	stats         stats.Manager
+	umbra         umbra.Config
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -61,7 +65,10 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
 		cone:          ctx.Value("cone").(bool),
-		umbra:         config.Umbra,
+		stats:         v.GetFeature(stats.ManagerType()).(stats.Manager),
+	}
+	if config.Umbra != nil {
+		server.umbra = config.Umbra
 	}
 
 	if config.Fallbacks != nil {
@@ -144,24 +151,13 @@ func (s *Server) GetUsersCount(context.Context) int64 {
 
 // Network implements proxy.Inbound.Network().
 func (s *Server) Network() []net.Network {
-	return []net.Network{net.Network_TCP, net.Network_UDP, net.Network_UNIX}
-}
-
-// umbraEnabled reports whether umbra traffic is allowed on this inbound.
-func (s *Server) umbraEnabled() bool {
-	if s.umbra == nil {
-		return true
-	}
-	if !s.umbra.Enabled {
-		return false
-	}
-	return s.umbra.Factor >= 1.0 && s.umbra.Factor <= 2.0
+	return []net.Network{net.Network_TCP, net.Network_UNIX}
 }
 
 // Process implements proxy.Inbound.Process().
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	if !s.umbraEnabled() {
-		return errors.New("umbra: inbound disabled")
+	if err := umbra.Gate(s.umbra); err != nil {
+		return err
 	}
 	iConn := stat.TryUnwrapStatsConn(conn)
 
@@ -244,6 +240,21 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 
+	// Shadow bytes are delivered as mux frames that the client discards; other
+	// request types have no such channel and would corrupt the application
+	// stream.
+	var reader buf.Reader = clientReader
+	var writer buf.Writer = buf.NewWriter(conn)
+	if umbra.Active(s.umbra) {
+		if !mux.IsMuxCool(destination) {
+			return errors.New("umbra: this inbound only accepts mux connections")
+		}
+		realBytes := new(umbra.Counter)
+		locked := umbra.NewLockedWriter(writer)
+		reader, writer = umbra.Count(realBytes, reader, locked)
+		umbra.StartWorker(ctx, s.umbra.GetFactor(), s.stats, realBytes, locked)
+	}
+
 	if destination.Network == net.Network_UDP { // handle udp request
 		return s.handleUDPPayload(ctx, sessionPolicy, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)
 	}
@@ -257,7 +268,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	})
 
 	errors.LogInfo(ctx, "received request for ", destination)
-	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher)
+	return s.handleConnection(ctx, sessionPolicy, destination, reader, writer, dispatcher)
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Session, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {

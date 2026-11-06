@@ -1,6 +1,8 @@
 package conf_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/xtls/xray-core/common/net"
@@ -168,8 +170,7 @@ func TestVLessInbound(t *testing.T) {
 				"decryption": "none",
 				"umbra": {
 					"enabled": true,
-					"factor": 1.2,
-					"blackholeTag": "umbra-sink"
+					"factor": 1.2
 				}
 			}`,
 			Parser: loadJSON(creator),
@@ -186,11 +187,97 @@ func TestVLessInbound(t *testing.T) {
 				},
 				Decryption: "none",
 				Umbra: &inbound.UmbraConfig{
-					Enabled:      true,
-					Factor:       1.2,
-					BlackholeTag: "umbra-sink",
+					Enabled: true,
+					Factor:  1.2,
 				},
 			},
 		},
 	})
+}
+
+func TestVLessInboundUmbraValidation(t *testing.T) {
+	creator := func() Buildable {
+		return new(VLessInboundConfig)
+	}
+	base := `{
+		"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b", "email": "love@example.com"}],
+		"decryption": "none",
+		%s
+	}`
+
+	invalid := map[string]string{
+		"factor above range":           `"umbra": {"enabled": true, "factor": 2.5}`,
+		"factor below range":           `"umbra": {"enabled": false, "factor": 0.5}`,
+		"factor zero":                  `"umbra": {"enabled": true, "factor": 0}`,
+		"factor one while enabled":     `"umbra": {"enabled": true, "factor": 1.0}`,
+		"factor missing while enabled": `"umbra": {"enabled": true}`,
+	}
+	for name, umbra := range invalid {
+		if _, err := loadJSON(creator)(fmt.Sprintf(base, umbra)); err == nil {
+			t.Fatalf("%s: expected a config error", name)
+		}
+	}
+
+	valid := map[string]string{
+		"disabled without factor": `"umbra": {"enabled": false}`,
+		"disabled with factor":    `"umbra": {"enabled": false, "factor": 1.5}`,
+		"active factor":           `"umbra": {"enabled": true, "factor": 2.0}`,
+	}
+	for name, umbra := range valid {
+		if _, err := loadJSON(creator)(fmt.Sprintf(base, umbra)); err != nil {
+			t.Fatalf("%s: unexpected error: %v", name, err)
+		}
+	}
+}
+
+func TestInboundLevelUmbraPlacement(t *testing.T) {
+	build := func(t *testing.T, raw string) error {
+		t.Helper()
+		var cfg InboundDetourConfig
+		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+			t.Fatalf("failed to parse inbound config: %v", err)
+		}
+		_, err := cfg.Build()
+		return err
+	}
+
+	// "umbra" at inbound level (the documented shape) is merged into the
+	// protocol settings: an invalid factor must fail the vless parser.
+	if err := build(t, `{
+		"protocol": "vless",
+		"port": 12345,
+		"settings": {
+			"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b", "email": "love@example.com"}],
+			"decryption": "none"
+		},
+		"umbra": {"enabled": true, "factor": 2.5}
+	}`); err == nil {
+		t.Fatal("expected error for inbound-level umbra with out-of-range factor")
+	}
+
+	if err := build(t, `{
+		"protocol": "vless",
+		"port": 12345,
+		"settings": {
+			"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b", "email": "love@example.com"}],
+			"decryption": "none"
+		},
+		"umbra": {"enabled": true, "factor": 1.2}
+	}`); err != nil {
+		t.Fatalf("inbound-level umbra should build: %v", err)
+	}
+
+	// Setting umbra in both places is ambiguous and must fail.
+	if err := build(t, `{
+		"protocol": "vless",
+		"port": 12345,
+		"settings": {
+			"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b", "email": "love@example.com"}],
+			"decryption": "none",
+			"umbra": {"enabled": true, "factor": 1.2}
+		},
+		"umbra": {"enabled": true, "factor": 1.2}
+	}`); err == nil {
+		t.Fatal("expected error for umbra set at both levels")
+	}
 }

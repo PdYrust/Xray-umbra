@@ -110,11 +110,18 @@ type TrojanUserConfig struct {
 	Flow     string `json:"flow"`
 }
 
+type TrojanInboundUmbraConfig struct {
+	Enabled      bool    `json:"enabled"`
+	Factor       float64 `json:"factor"`
+	BlackholeTag string  `json:"blackholeTag"`
+}
+
 // TrojanServerConfig is Inbound configuration
 type TrojanServerConfig struct {
 	Users     []*TrojanUserConfig      `json:"users"`
 	Clients   []*TrojanUserConfig      `json:"clients"`
 	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
+	Umbra     *TrojanInboundUmbraConfig `json:"umbra"`
 }
 
 // Build implements Buildable
@@ -198,6 +205,21 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		}
 		if fb.Xver > 2 {
 			return nil, errors.New(`Trojan fallbacks: invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
+		}
+	}
+
+	if c.Umbra != nil {
+		factor := c.Umbra.Factor
+		if factor == 0 {
+			factor = 1.0
+		}
+		if factor < 1.0 || factor > 2.0 {
+			return nil, errors.New("invalid umbra factor: must be between 1.0 and 2.0")
+		}
+		config.Umbra = &trojan.UmbraConfig{
+			Enabled:      c.Umbra.Enabled,
+			Factor:       factor,
+			BlackholeTag: c.Umbra.BlackholeTag,
 		}
 	}
 

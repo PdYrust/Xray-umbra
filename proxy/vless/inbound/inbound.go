@@ -12,6 +12,7 @@ import (
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/reverse"
+	"github.com/xtls/xray-core/app/umbra"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -82,6 +83,7 @@ type Handler struct {
 	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
+	umbra                  *UmbraConfig
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
 
@@ -97,6 +99,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		observer:               v.GetFeature(extension.ObservatoryType()),
 		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
+		umbra:                  config.Umbra,
 	}
 
 	if config.Decryption != "" && config.Decryption != "none" {
@@ -262,11 +265,27 @@ func (h *Handler) GetUsersCount(context.Context) int64 {
 
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
-	return []net.Network{net.Network_TCP, net.Network_UNIX}
+	return []net.Network{net.Network_TCP, net.Network_UDP, net.Network_UNIX}
+}
+
+// umbraEnabled reports whether umbra traffic is allowed on this inbound.
+// An inbound without an umbra config is always allowed.
+func (h *Handler) umbraEnabled() bool {
+	if h.umbra == nil {
+		return true
+	}
+	if !h.umbra.Enabled {
+		return false
+	}
+	return umbra.ValidFactor(h.umbra.Factor)
 }
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatch routing.Dispatcher) error {
+	if !h.umbraEnabled() {
+		return errors.New("umbra: inbound disabled")
+	}
+
 	iConn := stat.TryUnwrapStatsConn(connection)
 
 	if h.decryption != nil {
@@ -621,6 +640,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
 	}
 
+	if h.umbra != nil && h.umbra.Enabled && h.umbra.Factor > 1.0 && request.User != nil {
+		go h.runUmbraWorker(ctx, request.User, h.umbra, clientWriter)
+	}
+
 	if err := dispatch.DispatchLink(
 		ctx, request.Destination(), &transport.Link{
 			Reader: clientReader,
@@ -630,6 +653,71 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("failed to dispatch request").Base(err)
 	}
 	return nil
+}
+
+func (h *Handler) runUmbraWorker(ctx context.Context, user *protocol.MemoryUser, cfg *UmbraConfig, clientWriter buf.Writer) {
+	if cfg == nil || !cfg.Enabled || cfg.Factor <= 1.0 {
+		return
+	}
+	if user == nil || len(user.Email) == 0 {
+		return
+	}
+	if clientWriter == nil {
+		return
+	}
+
+	uplinkCounter, err := h.stats.GetOrRegisterCounter("user>>>" + user.Email + ">>>traffic>>>uplink")
+	if err != nil || uplinkCounter == nil {
+		return
+	}
+	// Register the per-connection counters (real uplink/downlink and the
+	// separate umbra counters) so panels can observe them independently.
+	downlinkCounter, _ := h.stats.GetOrRegisterCounter("user>>>" + user.Email + ">>>traffic>>>downlink")
+	umbraUplinkCounter, _ := h.stats.GetOrRegisterCounter("user>>>" + user.Email + ">>>traffic>>>umbra>>>uplink")
+	umbraDownlinkCounter, _ := h.stats.GetOrRegisterCounter("user>>>" + user.Email + ">>>traffic>>>umbra>>>downlink")
+	_ = downlinkCounter
+	_ = umbraUplinkCounter
+
+	counter := uplinkCounter
+	var last int64
+
+	umbra.Run(ctx, time.Second, func() bool {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
+
+		cur := counter.Value()
+		delta := cur - last
+		last = cur
+		shadow := umbra.ShadowBytes(delta, cfg.Factor)
+		if shadow <= 0 {
+			return true
+		}
+
+		remaining := shadow
+		for remaining > 0 {
+			n := remaining
+			if n > 32768 {
+				n = 32768
+			}
+			data := make([]byte, n)
+			reader := buf.NewReader(bytes.NewReader(data))
+			link := &transport.Link{
+				Reader: reader,
+				Writer: clientWriter,
+			}
+			// WrapLink attaches the per-user counters so the shadow bytes
+			// written downstream are accounted for automatically.
+			wrapped := dispatcher.WrapLink(ctx, h.policyManager, h.stats, link)
+			if err := buf.Copy(reader, wrapped.Writer, buf.AddToStatCounter(umbraDownlinkCounter)); err != nil {
+				return false
+			}
+			remaining -= n
+		}
+		return true
+	})
 }
 
 type Reverse struct {

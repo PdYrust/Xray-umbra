@@ -107,6 +107,7 @@ type Handler struct {
 	clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
 	sessionHistory        *encoding.SessionHistory
+	umbra                 *UmbraConfig
 }
 
 // New creates a new VMess inbound handler.
@@ -118,6 +119,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		clients:               vmess.NewTimedUserValidator(),
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
+		umbra:                 config.Umbra,
 	}
 
 	for _, user := range config.User {
@@ -144,7 +146,18 @@ func (h *Handler) Close() error {
 
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
-	return []net.Network{net.Network_TCP, net.Network_UNIX}
+	return []net.Network{net.Network_TCP, net.Network_UDP, net.Network_UNIX}
+}
+
+// umbraEnabled reports whether umbra traffic is allowed on this inbound.
+func (h *Handler) umbraEnabled() bool {
+	if h.umbra == nil {
+		return true
+	}
+	if !h.umbra.Enabled {
+		return false
+	}
+	return h.umbra.Factor >= 1.0 && h.umbra.Factor <= 2.0
 }
 
 func (h *Handler) GetOrGenerateUser(email string) *protocol.MemoryUser {
@@ -225,6 +238,9 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
+	if !h.umbraEnabled() {
+		return errors.New("umbra: inbound disabled")
+	}
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return errors.New("unable to set read deadline").Base(err)

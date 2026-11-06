@@ -39,6 +39,7 @@ type Server struct {
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
 	cone          bool
+	umbra         *UmbraConfig
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -60,6 +61,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
 		cone:          ctx.Value("cone").(bool),
+		umbra:         config.Umbra,
 	}
 
 	if config.Fallbacks != nil {
@@ -142,11 +144,25 @@ func (s *Server) GetUsersCount(context.Context) int64 {
 
 // Network implements proxy.Inbound.Network().
 func (s *Server) Network() []net.Network {
-	return []net.Network{net.Network_TCP, net.Network_UNIX}
+	return []net.Network{net.Network_TCP, net.Network_UDP, net.Network_UNIX}
+}
+
+// umbraEnabled reports whether umbra traffic is allowed on this inbound.
+func (s *Server) umbraEnabled() bool {
+	if s.umbra == nil {
+		return true
+	}
+	if !s.umbra.Enabled {
+		return false
+	}
+	return s.umbra.Factor >= 1.0 && s.umbra.Factor <= 2.0
 }
 
 // Process implements proxy.Inbound.Process().
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	if !s.umbraEnabled() {
+		return errors.New("umbra: inbound disabled")
+	}
 	iConn := stat.TryUnwrapStatsConn(conn)
 
 	sessionPolicy := s.policyManager.ForLevel(0)

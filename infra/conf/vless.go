@@ -30,13 +30,20 @@ type VLessInboundFallback struct {
 	Xver uint64          `json:"xver"`
 }
 
+type VLessInboundUmbraConfig struct {
+	Enabled      bool    `json:"enabled"`
+	Factor       float64 `json:"factor"`
+	BlackholeTag string  `json:"blackholeTag"`
+}
+
 type VLessInboundConfig struct {
-	Users      []json.RawMessage       `json:"users"`
-	Clients    []json.RawMessage       `json:"clients"`
-	Decryption string                  `json:"decryption"`
-	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
-	Flow       string                  `json:"flow"`
-	Testseed   []uint32                `json:"testseed"`
+	Users      []json.RawMessage        `json:"users"`
+	Clients    []json.RawMessage        `json:"clients"`
+	Decryption string                   `json:"decryption"`
+	Fallbacks  []*VLessInboundFallback  `json:"fallbacks"`
+	Flow       string                   `json:"flow"`
+	Testseed   []uint32                 `json:"testseed"`
+	Umbra      *VLessInboundUmbraConfig `json:"umbra"`
 }
 
 // Build implements Buildable
@@ -211,6 +218,20 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		}
 	}
 
+	if c.Umbra != nil {
+		factor := c.Umbra.Factor
+		if factor == 0 {
+			factor = 1.0
+		}
+		if factor < 1.0 || factor > 2.0 {
+			return nil, errors.New("invalid umbra factor: must be between 1.0 and 2.0")
+		}
+		config.Umbra = &inbound.UmbraConfig{
+			Enabled:      c.Umbra.Enabled,
+			Factor:       factor,
+			BlackholeTag: c.Umbra.BlackholeTag,
+		}
+	}
 	return config, nil
 }
 

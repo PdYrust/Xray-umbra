@@ -54,10 +54,17 @@ func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 	return config
 }
 
+type VMessInboundUmbraConfig struct {
+	Enabled      bool    `json:"enabled"`
+	Factor       float64 `json:"factor"`
+	BlackholeTag string  `json:"blackholeTag"`
+}
+
 type VMessInboundConfig struct {
-	Users    []json.RawMessage   `json:"users"`
-	Clients  []json.RawMessage   `json:"clients"`
-	Defaults *VMessDefaultConfig `json:"default"`
+	Users    []json.RawMessage     `json:"users"`
+	Clients  []json.RawMessage     `json:"clients"`
+	Defaults *VMessDefaultConfig   `json:"default"`
+	Umbra    *VMessInboundUmbraConfig `json:"umbra"`
 }
 
 // Build implements Buildable
@@ -97,6 +104,21 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 	}
 	if err := task.ParallelForN(len(c.Users), processUser); err != nil {
 		return nil, err
+	}
+
+	if c.Umbra != nil {
+		factor := c.Umbra.Factor
+		if factor == 0 {
+			factor = 1.0
+		}
+		if factor < 1.0 || factor > 2.0 {
+			return nil, errors.New("invalid umbra factor: must be between 1.0 and 2.0")
+		}
+		config.Umbra = &inbound.UmbraConfig{
+			Enabled:      c.Umbra.Enabled,
+			Factor:       factor,
+			BlackholeTag: c.Umbra.BlackholeTag,
+		}
 	}
 
 	return config, nil

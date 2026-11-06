@@ -138,17 +138,78 @@ func (x *Account) GetIvCheck() bool {
 	return false
 }
 
+type UmbraConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Factor        float64                `protobuf:"fixed64,2,opt,name=factor,proto3" json:"factor,omitempty"`
+	BlackholeTag  string                 `protobuf:"bytes,3,opt,name=blackhole_tag,json=blackholeTag,proto3" json:"blackhole_tag,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UmbraConfig) Reset() {
+	*x = UmbraConfig{}
+	mi := &file_proxy_shadowsocks_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UmbraConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UmbraConfig) ProtoMessage() {}
+
+func (x *UmbraConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_shadowsocks_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UmbraConfig.ProtoReflect.Descriptor instead.
+func (*UmbraConfig) Descriptor() ([]byte, []int) {
+	return file_proxy_shadowsocks_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *UmbraConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *UmbraConfig) GetFactor() float64 {
+	if x != nil {
+		return x.Factor
+	}
+	return 0
+}
+
+func (x *UmbraConfig) GetBlackholeTag() string {
+	if x != nil {
+		return x.BlackholeTag
+	}
+	return ""
+}
+
 type ServerConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Users         []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
 	Network       []net.Network          `protobuf:"varint,2,rep,packed,name=network,proto3,enum=xray.common.net.Network" json:"network,omitempty"`
+	Umbra         *UmbraConfig           `protobuf:"bytes,3,opt,name=umbra,proto3" json:"umbra,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServerConfig) Reset() {
 	*x = ServerConfig{}
-	mi := &file_proxy_shadowsocks_config_proto_msgTypes[1]
+	mi := &file_proxy_shadowsocks_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -160,7 +221,7 @@ func (x *ServerConfig) String() string {
 func (*ServerConfig) ProtoMessage() {}
 
 func (x *ServerConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_shadowsocks_config_proto_msgTypes[1]
+	mi := &file_proxy_shadowsocks_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -173,7 +234,7 @@ func (x *ServerConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerConfig.ProtoReflect.Descriptor instead.
 func (*ServerConfig) Descriptor() ([]byte, []int) {
-	return file_proxy_shadowsocks_config_proto_rawDescGZIP(), []int{1}
+	return file_proxy_shadowsocks_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ServerConfig) GetUsers() []*protocol.User {
@@ -190,6 +251,13 @@ func (x *ServerConfig) GetNetwork() []net.Network {
 	return nil
 }
 
+func (x *ServerConfig) GetUmbra() *UmbraConfig {
+	if x != nil {
+		return x.Umbra
+	}
+	return nil
+}
+
 type ClientConfig struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
 	Server        *protocol.ServerEndpoint `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
@@ -199,7 +267,7 @@ type ClientConfig struct {
 
 func (x *ClientConfig) Reset() {
 	*x = ClientConfig{}
-	mi := &file_proxy_shadowsocks_config_proto_msgTypes[2]
+	mi := &file_proxy_shadowsocks_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -211,7 +279,7 @@ func (x *ClientConfig) String() string {
 func (*ClientConfig) ProtoMessage() {}
 
 func (x *ClientConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_shadowsocks_config_proto_msgTypes[2]
+	mi := &file_proxy_shadowsocks_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -224,7 +292,7 @@ func (x *ClientConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientConfig.ProtoReflect.Descriptor instead.
 func (*ClientConfig) Descriptor() ([]byte, []int) {
-	return file_proxy_shadowsocks_config_proto_rawDescGZIP(), []int{2}
+	return file_proxy_shadowsocks_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ClientConfig) GetServer() *protocol.ServerEndpoint {
@@ -243,10 +311,15 @@ const file_proxy_shadowsocks_config_proto_rawDesc = "" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12C\n" +
 	"\vcipher_type\x18\x02 \x01(\x0e2\".xray.proxy.shadowsocks.CipherTypeR\n" +
 	"cipherType\x12\x19\n" +
-	"\biv_check\x18\x03 \x01(\bR\aivCheck\"t\n" +
+	"\biv_check\x18\x03 \x01(\bR\aivCheck\"d\n" +
+	"\vUmbraConfig\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x16\n" +
+	"\x06factor\x18\x02 \x01(\x01R\x06factor\x12#\n" +
+	"\rblackhole_tag\x18\x03 \x01(\tR\fblackholeTag\"\xaf\x01\n" +
 	"\fServerConfig\x120\n" +
 	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x122\n" +
-	"\anetwork\x18\x02 \x03(\x0e2\x18.xray.common.net.NetworkR\anetwork\"L\n" +
+	"\anetwork\x18\x02 \x03(\x0e2\x18.xray.common.net.NetworkR\anetwork\x129\n" +
+	"\x05umbra\x18\x03 \x01(\v2#.xray.proxy.shadowsocks.UmbraConfigR\x05umbra\"L\n" +
 	"\fClientConfig\x12<\n" +
 	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server*j\n" +
 	"\n" +
@@ -271,26 +344,28 @@ func file_proxy_shadowsocks_config_proto_rawDescGZIP() []byte {
 }
 
 var file_proxy_shadowsocks_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proxy_shadowsocks_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_proxy_shadowsocks_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proxy_shadowsocks_config_proto_goTypes = []any{
 	(CipherType)(0),                 // 0: xray.proxy.shadowsocks.CipherType
 	(*Account)(nil),                 // 1: xray.proxy.shadowsocks.Account
-	(*ServerConfig)(nil),            // 2: xray.proxy.shadowsocks.ServerConfig
-	(*ClientConfig)(nil),            // 3: xray.proxy.shadowsocks.ClientConfig
-	(*protocol.User)(nil),           // 4: xray.common.protocol.User
-	(net.Network)(0),                // 5: xray.common.net.Network
-	(*protocol.ServerEndpoint)(nil), // 6: xray.common.protocol.ServerEndpoint
+	(*UmbraConfig)(nil),             // 2: xray.proxy.shadowsocks.UmbraConfig
+	(*ServerConfig)(nil),            // 3: xray.proxy.shadowsocks.ServerConfig
+	(*ClientConfig)(nil),            // 4: xray.proxy.shadowsocks.ClientConfig
+	(*protocol.User)(nil),           // 5: xray.common.protocol.User
+	(net.Network)(0),                // 6: xray.common.net.Network
+	(*protocol.ServerEndpoint)(nil), // 7: xray.common.protocol.ServerEndpoint
 }
 var file_proxy_shadowsocks_config_proto_depIdxs = []int32{
 	0, // 0: xray.proxy.shadowsocks.Account.cipher_type:type_name -> xray.proxy.shadowsocks.CipherType
-	4, // 1: xray.proxy.shadowsocks.ServerConfig.users:type_name -> xray.common.protocol.User
-	5, // 2: xray.proxy.shadowsocks.ServerConfig.network:type_name -> xray.common.net.Network
-	6, // 3: xray.proxy.shadowsocks.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	5, // 1: xray.proxy.shadowsocks.ServerConfig.users:type_name -> xray.common.protocol.User
+	6, // 2: xray.proxy.shadowsocks.ServerConfig.network:type_name -> xray.common.net.Network
+	2, // 3: xray.proxy.shadowsocks.ServerConfig.umbra:type_name -> xray.proxy.shadowsocks.UmbraConfig
+	7, // 4: xray.proxy.shadowsocks.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_proxy_shadowsocks_config_proto_init() }
@@ -304,7 +379,7 @@ func file_proxy_shadowsocks_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_shadowsocks_config_proto_rawDesc), len(file_proxy_shadowsocks_config_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

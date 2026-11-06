@@ -194,17 +194,78 @@ func (x *ClientConfig) GetServer() *protocol.ServerEndpoint {
 	return nil
 }
 
+type UmbraConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Factor        float64                `protobuf:"fixed64,2,opt,name=factor,proto3" json:"factor,omitempty"`
+	BlackholeTag  string                 `protobuf:"bytes,3,opt,name=blackhole_tag,json=blackholeTag,proto3" json:"blackhole_tag,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UmbraConfig) Reset() {
+	*x = UmbraConfig{}
+	mi := &file_proxy_trojan_config_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UmbraConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UmbraConfig) ProtoMessage() {}
+
+func (x *UmbraConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_trojan_config_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UmbraConfig.ProtoReflect.Descriptor instead.
+func (*UmbraConfig) Descriptor() ([]byte, []int) {
+	return file_proxy_trojan_config_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UmbraConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *UmbraConfig) GetFactor() float64 {
+	if x != nil {
+		return x.Factor
+	}
+	return 0
+}
+
+func (x *UmbraConfig) GetBlackholeTag() string {
+	if x != nil {
+		return x.BlackholeTag
+	}
+	return ""
+}
+
 type ServerConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Users         []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
 	Fallbacks     []*Fallback            `protobuf:"bytes,2,rep,name=fallbacks,proto3" json:"fallbacks,omitempty"`
+	Umbra         *UmbraConfig           `protobuf:"bytes,3,opt,name=umbra,proto3" json:"umbra,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServerConfig) Reset() {
 	*x = ServerConfig{}
-	mi := &file_proxy_trojan_config_proto_msgTypes[3]
+	mi := &file_proxy_trojan_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -216,7 +277,7 @@ func (x *ServerConfig) String() string {
 func (*ServerConfig) ProtoMessage() {}
 
 func (x *ServerConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_trojan_config_proto_msgTypes[3]
+	mi := &file_proxy_trojan_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -229,7 +290,7 @@ func (x *ServerConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerConfig.ProtoReflect.Descriptor instead.
 func (*ServerConfig) Descriptor() ([]byte, []int) {
-	return file_proxy_trojan_config_proto_rawDescGZIP(), []int{3}
+	return file_proxy_trojan_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ServerConfig) GetUsers() []*protocol.User {
@@ -242,6 +303,13 @@ func (x *ServerConfig) GetUsers() []*protocol.User {
 func (x *ServerConfig) GetFallbacks() []*Fallback {
 	if x != nil {
 		return x.Fallbacks
+	}
+	return nil
+}
+
+func (x *ServerConfig) GetUmbra() *UmbraConfig {
+	if x != nil {
+		return x.Umbra
 	}
 	return nil
 }
@@ -261,10 +329,15 @@ const file_proxy_trojan_config_proto_rawDesc = "" +
 	"\x04dest\x18\x05 \x01(\tR\x04dest\x12\x12\n" +
 	"\x04xver\x18\x06 \x01(\x04R\x04xver\"L\n" +
 	"\fClientConfig\x12<\n" +
-	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\"{\n" +
+	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\"d\n" +
+	"\vUmbraConfig\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x16\n" +
+	"\x06factor\x18\x02 \x01(\x01R\x06factor\x12#\n" +
+	"\rblackhole_tag\x18\x03 \x01(\tR\fblackholeTag\"\xb1\x01\n" +
 	"\fServerConfig\x120\n" +
 	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x129\n" +
-	"\tfallbacks\x18\x02 \x03(\v2\x1b.xray.proxy.trojan.FallbackR\tfallbacksBU\n" +
+	"\tfallbacks\x18\x02 \x03(\v2\x1b.xray.proxy.trojan.FallbackR\tfallbacks\x124\n" +
+	"\x05umbra\x18\x03 \x01(\v2\x1e.xray.proxy.trojan.UmbraConfigR\x05umbraBU\n" +
 	"\x15com.xray.proxy.trojanP\x01Z&github.com/xtls/xray-core/proxy/trojan\xaa\x02\x11Xray.Proxy.Trojanb\x06proto3"
 
 var (
@@ -279,24 +352,26 @@ func file_proxy_trojan_config_proto_rawDescGZIP() []byte {
 	return file_proxy_trojan_config_proto_rawDescData
 }
 
-var file_proxy_trojan_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proxy_trojan_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_proxy_trojan_config_proto_goTypes = []any{
 	(*Account)(nil),                 // 0: xray.proxy.trojan.Account
 	(*Fallback)(nil),                // 1: xray.proxy.trojan.Fallback
 	(*ClientConfig)(nil),            // 2: xray.proxy.trojan.ClientConfig
-	(*ServerConfig)(nil),            // 3: xray.proxy.trojan.ServerConfig
-	(*protocol.ServerEndpoint)(nil), // 4: xray.common.protocol.ServerEndpoint
-	(*protocol.User)(nil),           // 5: xray.common.protocol.User
+	(*UmbraConfig)(nil),             // 3: xray.proxy.trojan.UmbraConfig
+	(*ServerConfig)(nil),            // 4: xray.proxy.trojan.ServerConfig
+	(*protocol.ServerEndpoint)(nil), // 5: xray.common.protocol.ServerEndpoint
+	(*protocol.User)(nil),           // 6: xray.common.protocol.User
 }
 var file_proxy_trojan_config_proto_depIdxs = []int32{
-	4, // 0: xray.proxy.trojan.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
-	5, // 1: xray.proxy.trojan.ServerConfig.users:type_name -> xray.common.protocol.User
+	5, // 0: xray.proxy.trojan.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
+	6, // 1: xray.proxy.trojan.ServerConfig.users:type_name -> xray.common.protocol.User
 	1, // 2: xray.proxy.trojan.ServerConfig.fallbacks:type_name -> xray.proxy.trojan.Fallback
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 3: xray.proxy.trojan.ServerConfig.umbra:type_name -> xray.proxy.trojan.UmbraConfig
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proxy_trojan_config_proto_init() }
@@ -310,7 +385,7 @@ func file_proxy_trojan_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_trojan_config_proto_rawDesc), len(file_proxy_trojan_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

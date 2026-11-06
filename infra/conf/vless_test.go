@@ -155,5 +155,42 @@ func TestVLessInbound(t *testing.T) {
 				},
 			},
 		},
+		{
+			Input: `{
+				"clients": [
+					{
+						"id": "27848739-7e62-4138-9fd3-098a63964b6b",
+						"flow": "xtls-rprx-vision",
+						"level": 0,
+						"email": "love@example.com"
+					}
+				],
+				"decryption": "none",
+				"umbra": {
+					"enabled": true,
+					"factor": 1.2,
+					"blackholeTag": "umbra-sink"
+				}
+			}`,
+			Parser: loadJSON(creator),
+			Output: &inbound.Config{
+				Users: []*protocol.User{
+					{
+						Account: serial.ToTypedMessage(&vless.Account{
+							Id:   "27848739-7e62-4138-9fd3-098a63964b6b",
+							Flow: "xtls-rprx-vision",
+						}),
+						Level: 0,
+						Email: "love@example.com",
+					},
+				},
+				Decryption: "none",
+				Umbra: &inbound.UmbraConfig{
+					Enabled:      true,
+					Factor:       1.2,
+					BlackholeTag: "umbra-sink",
+				},
+			},
+		},
 	})
 }

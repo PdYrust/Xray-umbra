@@ -17,6 +17,12 @@ message Fallback {
   uint64 xver = 6;
 }
 
+message UmbraConfig {
+  bool enabled = 1;
+  double factor = 2;
+  string blackhole_tag = 3;
+}
+
 message Config {
   repeated xray.common.protocol.User users = 1;
   repeated Fallback fallbacks = 2;
@@ -26,4 +32,6 @@ message Config {
   int64 seconds_from = 5;
   int64 seconds_to = 6;
   string padding = 7;
+
+  UmbraConfig umbra = 8;
 }

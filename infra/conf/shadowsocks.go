@@ -36,14 +36,21 @@ type ShadowsocksUserConfig struct {
 	Port     uint16   `json:"port"`
 }
 
+type ShadowsocksServerUmbraConfig struct {
+	Enabled      bool    `json:"enabled"`
+	Factor       float64 `json:"factor"`
+	BlackholeTag string  `json:"blackholeTag"`
+}
+
 type ShadowsocksServerConfig struct {
-	Cipher      string                   `json:"method"`
-	Password    string                   `json:"password"`
-	Level       byte                     `json:"level"`
-	Email       string                   `json:"email"`
-	Users       []*ShadowsocksUserConfig `json:"users"`
-	Clients     []*ShadowsocksUserConfig `json:"clients"`
-	NetworkList *NetworkList             `json:"network"`
+	Cipher      string                     `json:"method"`
+	Password    string                     `json:"password"`
+	Level       byte                       `json:"level"`
+	Email       string                     `json:"email"`
+	Users       []*ShadowsocksUserConfig   `json:"users"`
+	Clients     []*ShadowsocksUserConfig   `json:"clients"`
+	NetworkList *NetworkList               `json:"network"`
+	Umbra       *ShadowsocksServerUmbraConfig `json:"umbra"`
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
@@ -103,6 +110,21 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 			Level:   uint32(v.Level),
 			Account: serial.ToTypedMessage(account),
 		})
+	}
+
+	if v.Umbra != nil {
+		factor := v.Umbra.Factor
+		if factor == 0 {
+			factor = 1.0
+		}
+		if factor < 1.0 || factor > 2.0 {
+			return nil, errors.New("invalid umbra factor: must be between 1.0 and 2.0")
+		}
+		config.Umbra = &shadowsocks.UmbraConfig{
+			Enabled:      v.Umbra.Enabled,
+			Factor:       factor,
+			BlackholeTag: v.Umbra.BlackholeTag,
+		}
 	}
 
 	return config, nil

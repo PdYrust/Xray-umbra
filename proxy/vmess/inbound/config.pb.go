@@ -110,17 +110,78 @@ func (x *DefaultConfig) GetLevel() uint32 {
 	return 0
 }
 
+type UmbraConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Factor        float64                `protobuf:"fixed64,2,opt,name=factor,proto3" json:"factor,omitempty"`
+	BlackholeTag  string                 `protobuf:"bytes,3,opt,name=blackhole_tag,json=blackholeTag,proto3" json:"blackhole_tag,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UmbraConfig) Reset() {
+	*x = UmbraConfig{}
+	mi := &file_proxy_vmess_inbound_config_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UmbraConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UmbraConfig) ProtoMessage() {}
+
+func (x *UmbraConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_vmess_inbound_config_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UmbraConfig.ProtoReflect.Descriptor instead.
+func (*UmbraConfig) Descriptor() ([]byte, []int) {
+	return file_proxy_vmess_inbound_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *UmbraConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *UmbraConfig) GetFactor() float64 {
+	if x != nil {
+		return x.Factor
+	}
+	return 0
+}
+
+func (x *UmbraConfig) GetBlackholeTag() string {
+	if x != nil {
+		return x.BlackholeTag
+	}
+	return ""
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	User          []*protocol.User       `protobuf:"bytes,1,rep,name=user,proto3" json:"user,omitempty"`
 	Default       *DefaultConfig         `protobuf:"bytes,2,opt,name=default,proto3" json:"default,omitempty"`
+	Umbra         *UmbraConfig           `protobuf:"bytes,3,opt,name=umbra,proto3" json:"umbra,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_proxy_vmess_inbound_config_proto_msgTypes[2]
+	mi := &file_proxy_vmess_inbound_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -132,7 +193,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_vmess_inbound_config_proto_msgTypes[2]
+	mi := &file_proxy_vmess_inbound_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -145,7 +206,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_proxy_vmess_inbound_config_proto_rawDescGZIP(), []int{2}
+	return file_proxy_vmess_inbound_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Config) GetUser() []*protocol.User {
@@ -162,6 +223,13 @@ func (x *Config) GetDefault() *DefaultConfig {
 	return nil
 }
 
+func (x *Config) GetUmbra() *UmbraConfig {
+	if x != nil {
+		return x.Umbra
+	}
+	return nil
+}
+
 var File_proxy_vmess_inbound_config_proto protoreflect.FileDescriptor
 
 const file_proxy_vmess_inbound_config_proto_rawDesc = "" +
@@ -170,10 +238,15 @@ const file_proxy_vmess_inbound_config_proto_rawDesc = "" +
 	"\fDetourConfig\x12\x0e\n" +
 	"\x02to\x18\x01 \x01(\tR\x02to\"%\n" +
 	"\rDefaultConfig\x12\x14\n" +
-	"\x05level\x18\x02 \x01(\rR\x05level\"{\n" +
+	"\x05level\x18\x02 \x01(\rR\x05level\"d\n" +
+	"\vUmbraConfig\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x16\n" +
+	"\x06factor\x18\x02 \x01(\x01R\x06factor\x12#\n" +
+	"\rblackhole_tag\x18\x03 \x01(\tR\fblackholeTag\"\xb8\x01\n" +
 	"\x06Config\x12.\n" +
 	"\x04user\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x04user\x12A\n" +
-	"\adefault\x18\x02 \x01(\v2'.xray.proxy.vmess.inbound.DefaultConfigR\adefaultBj\n" +
+	"\adefault\x18\x02 \x01(\v2'.xray.proxy.vmess.inbound.DefaultConfigR\adefault\x12;\n" +
+	"\x05umbra\x18\x03 \x01(\v2%.xray.proxy.vmess.inbound.UmbraConfigR\x05umbraBj\n" +
 	"\x1ccom.xray.proxy.vmess.inboundP\x01Z-github.com/xtls/xray-core/proxy/vmess/inbound\xaa\x02\x18Xray.Proxy.Vmess.Inboundb\x06proto3"
 
 var (
@@ -188,21 +261,23 @@ func file_proxy_vmess_inbound_config_proto_rawDescGZIP() []byte {
 	return file_proxy_vmess_inbound_config_proto_rawDescData
 }
 
-var file_proxy_vmess_inbound_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_proxy_vmess_inbound_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proxy_vmess_inbound_config_proto_goTypes = []any{
 	(*DetourConfig)(nil),  // 0: xray.proxy.vmess.inbound.DetourConfig
 	(*DefaultConfig)(nil), // 1: xray.proxy.vmess.inbound.DefaultConfig
-	(*Config)(nil),        // 2: xray.proxy.vmess.inbound.Config
-	(*protocol.User)(nil), // 3: xray.common.protocol.User
+	(*UmbraConfig)(nil),   // 2: xray.proxy.vmess.inbound.UmbraConfig
+	(*Config)(nil),        // 3: xray.proxy.vmess.inbound.Config
+	(*protocol.User)(nil), // 4: xray.common.protocol.User
 }
 var file_proxy_vmess_inbound_config_proto_depIdxs = []int32{
-	3, // 0: xray.proxy.vmess.inbound.Config.user:type_name -> xray.common.protocol.User
+	4, // 0: xray.proxy.vmess.inbound.Config.user:type_name -> xray.common.protocol.User
 	1, // 1: xray.proxy.vmess.inbound.Config.default:type_name -> xray.proxy.vmess.inbound.DefaultConfig
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	2, // 2: xray.proxy.vmess.inbound.Config.umbra:type_name -> xray.proxy.vmess.inbound.UmbraConfig
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proxy_vmess_inbound_config_proto_init() }
@@ -216,7 +291,7 @@ func file_proxy_vmess_inbound_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_vmess_inbound_config_proto_rawDesc), len(file_proxy_vmess_inbound_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

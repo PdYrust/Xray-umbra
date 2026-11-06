@@ -86,7 +86,21 @@ func (s *Server) Network() []net.Network {
 	return list
 }
 
+// umbraEnabled reports whether umbra traffic is allowed on this inbound.
+func (s *Server) umbraEnabled() bool {
+	if s.config == nil || s.config.Umbra == nil {
+		return true
+	}
+	if !s.config.Umbra.Enabled {
+		return false
+	}
+	return s.config.Umbra.Factor >= 1.0 && s.config.Umbra.Factor <= 2.0
+}
+
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	if !s.umbraEnabled() {
+		return errors.New("umbra: inbound disabled")
+	}
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks"
 	inbound.CanSpliceCopy = 3

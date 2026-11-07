@@ -20,7 +20,7 @@ func TestGate(t *testing.T) {
 		wantErr string
 	}{
 		{"no config allows traffic", nil, ""},
-		{"disabled rejects", &fakeConfig{enabled: false, factor: 1.2}, "disabled"},
+		{"disabled allows traffic", &fakeConfig{enabled: false, factor: 1.2}, ""},
 		{"active allows", &fakeConfig{enabled: true, factor: 1.2}, ""},
 		{"factor one is neutral", &fakeConfig{enabled: true, factor: 1.0}, ""},
 		{"big factor allows", &fakeConfig{enabled: true, factor: 5.0}, ""},

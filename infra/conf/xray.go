@@ -136,7 +136,6 @@ type InboundDetourConfig struct {
 	PortList       *PortList        `json:"port"`
 	ListenOn       *Address         `json:"listen"`
 	Settings       *json.RawMessage `json:"settings"`
-	Umbra          *json.RawMessage `json:"umbra"` // rejected: belongs inside "settings"
 	Tag            string           `json:"tag"`
 	StreamSetting  *StreamConfig    `json:"streamSettings"`
 	SniffingConfig *SniffingConfig  `json:"sniffing"`
@@ -199,9 +198,6 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	settings := []byte("{}")
 	if c.Settings != nil {
 		settings = ([]byte)(*c.Settings)
-	}
-	if c.Umbra != nil {
-		return nil, errors.New(`"umbra" must be configured inside "settings"`)
 	}
 	rawConfig, err := inboundConfigLoader.LoadWithID(settings, c.Protocol)
 	if err != nil {

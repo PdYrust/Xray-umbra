@@ -13,7 +13,7 @@ func TestHandlerUmbraGate(t *testing.T) {
 		allowed bool
 	}{
 		{"no config", nil, true},
-		{"disabled", &UmbraConfig{Enabled: false, Factor: 1.2}, false},
+		{"disabled", &UmbraConfig{Enabled: false, Factor: 1.2}, true},
 		{"active", &UmbraConfig{Enabled: true, Factor: 1.2}, true},
 		{"factor one is neutral", &UmbraConfig{Enabled: true, Factor: 1.0}, true},
 		{"big factor", &UmbraConfig{Enabled: true, Factor: 5.0}, true},

@@ -233,7 +233,7 @@ func TestVLessInboundUmbraValidation(t *testing.T) {
 	}
 }
 
-func TestInboundLevelUmbraRejected(t *testing.T) {
+func TestInboundLevelUmbraIgnored(t *testing.T) {
 	build := func(t *testing.T, raw string) error {
 		t.Helper()
 		var cfg InboundDetourConfig
@@ -244,8 +244,9 @@ func TestInboundLevelUmbraRejected(t *testing.T) {
 		return err
 	}
 
-	// "umbra" belongs inside "settings"; an inbound-level key must be
-	// rejected rather than silently ignored.
+	// "umbra" is a settings option. An inbound-level key is ignored like any
+	// unknown field, exactly as stock Xray-core parses config: this config
+	// would fail the vless parser (factor below 1.0) if the key were merged.
 	if err := build(t, `{
 		"protocol": "vless",
 		"port": 12345,
@@ -253,23 +254,22 @@ func TestInboundLevelUmbraRejected(t *testing.T) {
 			"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b", "email": "love@example.com"}],
 			"decryption": "none"
 		},
-		"umbra": {"enabled": true, "factor": 1.2}
-	}`); err == nil {
-		t.Fatal("expected error for inbound-level umbra")
+		"umbra": {"enabled": true, "factor": 0.5}
+	}`); err != nil {
+		t.Fatalf("inbound-level umbra must be ignored, got error: %v", err)
 	}
 
-	// Setting umbra in both places must fail as well.
+	// The settings-level key is the real one: validation applies there.
 	if err := build(t, `{
 		"protocol": "vless",
 		"port": 12345,
 		"settings": {
 			"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b", "email": "love@example.com"}],
 			"decryption": "none",
-			"umbra": {"enabled": true, "factor": 1.2}
-		},
-		"umbra": {"enabled": true, "factor": 1.2}
+			"umbra": {"enabled": true, "factor": 0.5}
+		}
 	}`); err == nil {
-		t.Fatal("expected error for umbra set at both levels")
+		t.Fatal("expected error for settings-level umbra with factor below 1.0")
 	}
 
 	if err := build(t, `{

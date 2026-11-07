@@ -48,14 +48,12 @@ func Active(cfg Config) bool {
 }
 
 // Gate returns a non-nil error when connections on an umbra inbound must be
-// rejected: umbra is disabled, or enabled with a factor below 1.0. A nil
-// config means no umbra on the inbound and allows traffic.
+// rejected. Umbra is opt-in: a disabled or neutral config lets traffic pass
+// untouched; only a config that cannot work (factor below 1.0) is refused. A
+// nil config means no umbra on the inbound and allows traffic.
 func Gate(cfg Config) error {
-	if cfg == nil {
+	if cfg == nil || !cfg.GetEnabled() {
 		return nil
-	}
-	if !cfg.GetEnabled() {
-		return errors.New("umbra: inbound disabled")
 	}
 	if !ValidFactor(cfg.GetFactor()) {
 		return errors.New("umbra: factor must be at least 1.0")

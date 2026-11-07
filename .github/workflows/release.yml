@@ -12,6 +12,9 @@ jobs:
   check-assets:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    permissions:
+      contents: read
+      actions: write
     steps:
       - name: Restore Geodat Cache
         uses: actions/cache/restore@v6
@@ -61,13 +64,17 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
-            await github.rest.actions.createWorkflowDispatch({
-              owner,
-              repo,
-              workflow_id: 'scheduled-assets-update.yml',
-              ref: context.ref
-            });
-            console.log('Triggered scheduled-assets-update.yml due to missing assets on branch:', context.ref);
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'scheduled-assets-update.yml',
+                ref: context.ref
+              });
+              console.log('Triggered scheduled-assets-update.yml due to missing assets on branch:', context.ref);
+            } catch (e) {
+              console.log('Could not trigger scheduled-assets-update.yml (enable it under Actions > All workflows):', e.message);
+            }
 
       - name: Sleep for 90 seconds if Assets Missing
         if: steps.check-assets.outputs.missing == 'true'

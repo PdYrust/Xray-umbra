@@ -14,16 +14,16 @@ import (
 
 func TestFactorValidation(t *testing.T) {
 	for factor, valid := range map[float64]bool{
-		1.0: true, 1.2: true, 2.0: true,
-		0.9: false, 2.01: false, 0: false, 20: false, math.NaN(): false,
+		1.0: true, 1.2: true, 2.0: true, 5: true, 20: true, 100: true,
+		0.9: false, 0: false, -1: false, math.NaN(): false,
 	} {
 		if got := ValidFactor(factor); got != valid {
 			t.Fatalf("ValidFactor(%v) = %v, want %v", factor, got, valid)
 		}
 	}
 	for factor, active := range map[float64]bool{
-		1.2: true, 2.0: true,
-		1.0: false, 0.9: false, 2.01: false, 0: false,
+		1.2: true, 2.0: true, 5: true, 20: true,
+		1.0: false, 0.9: false, 0: false,
 	} {
 		if got := ActiveFactor(factor); got != active {
 			t.Fatalf("ActiveFactor(%v) = %v, want %v", factor, got, active)

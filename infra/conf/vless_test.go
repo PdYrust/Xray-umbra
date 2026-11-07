@@ -206,11 +206,10 @@ func TestVLessInboundUmbraValidation(t *testing.T) {
 	}`
 
 	invalid := map[string]string{
-		"factor above range":           `"umbra": {"enabled": true, "factor": 2.5}`,
-		"factor below range":           `"umbra": {"enabled": false, "factor": 0.5}`,
-		"factor zero":                  `"umbra": {"enabled": true, "factor": 0}`,
-		"factor one while enabled":     `"umbra": {"enabled": true, "factor": 1.0}`,
-		"factor missing while enabled": `"umbra": {"enabled": true}`,
+		"factor below one":                `"umbra": {"enabled": true, "factor": 0.5}`,
+		"factor zero":                     `"umbra": {"enabled": true, "factor": 0}`,
+		"factor negative":                 `"umbra": {"enabled": true, "factor": -1}`,
+		"factor below one while disabled": `"umbra": {"enabled": false, "factor": 0.5}`,
 	}
 	for name, umbra := range invalid {
 		if _, err := loadJSON(creator)(fmt.Sprintf(base, umbra)); err == nil {
@@ -219,9 +218,13 @@ func TestVLessInboundUmbraValidation(t *testing.T) {
 	}
 
 	valid := map[string]string{
-		"disabled without factor": `"umbra": {"enabled": false}`,
-		"disabled with factor":    `"umbra": {"enabled": false, "factor": 1.5}`,
-		"active factor":           `"umbra": {"enabled": true, "factor": 2.0}`,
+		"disabled without factor":      `"umbra": {"enabled": false}`,
+		"disabled with factor":         `"umbra": {"enabled": false, "factor": 1.5}`,
+		"active factor":                `"umbra": {"enabled": true, "factor": 2.0}`,
+		"factor one while enabled":     `"umbra": {"enabled": true, "factor": 1.0}`,
+		"factor missing while enabled": `"umbra": {"enabled": true}`,
+		"big factor":                   `"umbra": {"enabled": true, "factor": 5.0}`,
+		"very big factor":              `"umbra": {"enabled": true, "factor": 20}`,
 	}
 	for name, umbra := range valid {
 		if _, err := loadJSON(creator)(fmt.Sprintf(base, umbra)); err != nil {
@@ -230,7 +233,7 @@ func TestVLessInboundUmbraValidation(t *testing.T) {
 	}
 }
 
-func TestInboundLevelUmbraPlacement(t *testing.T) {
+func TestInboundLevelUmbraRejected(t *testing.T) {
 	build := func(t *testing.T, raw string) error {
 		t.Helper()
 		var cfg InboundDetourConfig
@@ -241,20 +244,8 @@ func TestInboundLevelUmbraPlacement(t *testing.T) {
 		return err
 	}
 
-	// "umbra" at inbound level (the documented shape) is merged into the
-	// protocol settings: an invalid factor must fail the vless parser.
-	if err := build(t, `{
-		"protocol": "vless",
-		"port": 12345,
-		"settings": {
-			"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b", "email": "love@example.com"}],
-			"decryption": "none"
-		},
-		"umbra": {"enabled": true, "factor": 2.5}
-	}`); err == nil {
-		t.Fatal("expected error for inbound-level umbra with out-of-range factor")
-	}
-
+	// "umbra" belongs inside "settings"; an inbound-level key must be
+	// rejected rather than silently ignored.
 	if err := build(t, `{
 		"protocol": "vless",
 		"port": 12345,
@@ -263,11 +254,11 @@ func TestInboundLevelUmbraPlacement(t *testing.T) {
 			"decryption": "none"
 		},
 		"umbra": {"enabled": true, "factor": 1.2}
-	}`); err != nil {
-		t.Fatalf("inbound-level umbra should build: %v", err)
+	}`); err == nil {
+		t.Fatal("expected error for inbound-level umbra")
 	}
 
-	// Setting umbra in both places is ambiguous and must fail.
+	// Setting umbra in both places must fail as well.
 	if err := build(t, `{
 		"protocol": "vless",
 		"port": 12345,
@@ -279,5 +270,17 @@ func TestInboundLevelUmbraPlacement(t *testing.T) {
 		"umbra": {"enabled": true, "factor": 1.2}
 	}`); err == nil {
 		t.Fatal("expected error for umbra set at both levels")
+	}
+
+	if err := build(t, `{
+		"protocol": "vless",
+		"port": 12345,
+		"settings": {
+			"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b", "email": "love@example.com"}],
+			"decryption": "none",
+			"umbra": {"enabled": true, "factor": 1.2}
+		}
+	}`); err != nil {
+		t.Fatalf("settings-level umbra should build: %v", err)
 	}
 }

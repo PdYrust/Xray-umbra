@@ -214,10 +214,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 			factor = *c.Umbra.Factor
 		}
 		if !umbra.ValidFactor(factor) {
-			return nil, errors.New("invalid umbra factor: must be between 1.0 and 2.0")
-		}
-		if c.Umbra.Enabled && !umbra.ActiveFactor(factor) {
-			return nil, errors.New("umbra factor must be greater than 1.0 when enabled")
+			return nil, errors.New("invalid umbra factor: must be at least 1.0")
 		}
 		config.Umbra = &trojan.UmbraConfig{
 			Enabled: c.Umbra.Enabled,

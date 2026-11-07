@@ -136,7 +136,7 @@ type InboundDetourConfig struct {
 	PortList       *PortList        `json:"port"`
 	ListenOn       *Address         `json:"listen"`
 	Settings       *json.RawMessage `json:"settings"`
-	Umbra          *json.RawMessage `json:"umbra"`
+	Umbra          *json.RawMessage `json:"umbra"` // rejected: belongs inside "settings"
 	Tag            string           `json:"tag"`
 	StreamSetting  *StreamConfig    `json:"streamSettings"`
 	SniffingConfig *SniffingConfig  `json:"sniffing"`
@@ -201,21 +201,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		settings = ([]byte)(*c.Settings)
 	}
 	if c.Umbra != nil {
-		// The documented config shape places "umbra" at inbound level while
-		// the protocol parsers read it from settings; accept both.
-		var merged map[string]json.RawMessage
-		if err := json.Unmarshal(settings, &merged); err != nil {
-			return nil, errors.New("failed to parse inbound settings").Base(err)
-		}
-		if _, exists := merged["umbra"]; exists {
-			return nil, errors.New("umbra is set both at inbound level and in settings")
-		}
-		merged["umbra"] = *c.Umbra
-		b, err := json.Marshal(merged)
-		if err != nil {
-			return nil, errors.New("failed to merge inbound umbra config").Base(err)
-		}
-		settings = b
+		return nil, errors.New(`"umbra" must be configured inside "settings"`)
 	}
 	rawConfig, err := inboundConfigLoader.LoadWithID(settings, c.Protocol)
 	if err != nil {

@@ -27,9 +27,6 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 )
 
-// MaxFactor is the largest factor accepted by config validation.
-const MaxFactor = 2.0
-
 const (
 	// shadowSessionID addresses frames that stock mux clients discard on
 	// arrival: session IDs are allocated from 1 upwards, so 0 is never live.
@@ -51,8 +48,8 @@ func Active(cfg Config) bool {
 }
 
 // Gate returns a non-nil error when connections on an umbra inbound must be
-// rejected: umbra is disabled, or enabled with a factor that cannot work. A
-// nil config means no umbra on the inbound and allows traffic.
+// rejected: umbra is disabled, or enabled with a factor below 1.0. A nil
+// config means no umbra on the inbound and allows traffic.
 func Gate(cfg Config) error {
 	if cfg == nil {
 		return nil
@@ -60,20 +57,22 @@ func Gate(cfg Config) error {
 	if !cfg.GetEnabled() {
 		return errors.New("umbra: inbound disabled")
 	}
-	if !ActiveFactor(cfg.GetFactor()) {
-		return errors.New("umbra: factor must be greater than 1.0 and at most 2.0")
+	if !ValidFactor(cfg.GetFactor()) {
+		return errors.New("umbra: factor must be at least 1.0")
 	}
 	return nil
 }
 
-// ValidFactor reports whether factor is within the allowed range (1.0-2.0).
+// ValidFactor reports whether factor is usable (at least 1.0).
 func ValidFactor(factor float64) bool {
-	return factor >= 1.0 && factor <= MaxFactor
+	return factor >= 1.0
 }
 
 // ActiveFactor reports whether factor requests shadow traffic (> 1.0).
+// A factor of exactly 1.0 is the neutral position: umbra stays off and the
+// traffic passes untouched.
 func ActiveFactor(factor float64) bool {
-	return factor > 1.0 && factor <= MaxFactor
+	return factor > 1.0
 }
 
 // LockedWriter serializes WriteMultiBuffer calls so shadow frames can share a

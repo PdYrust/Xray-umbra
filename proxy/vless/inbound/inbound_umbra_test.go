@@ -15,9 +15,9 @@ func TestHandlerUmbraGate(t *testing.T) {
 		{"no config", nil, true},
 		{"disabled", &UmbraConfig{Enabled: false, Factor: 1.2}, false},
 		{"active", &UmbraConfig{Enabled: true, Factor: 1.2}, true},
-		{"max factor", &UmbraConfig{Enabled: true, Factor: 2.0}, true},
-		{"factor one is a bypass", &UmbraConfig{Enabled: true, Factor: 1.0}, false},
-		{"factor out of range", &UmbraConfig{Enabled: true, Factor: 2.5}, false},
+		{"factor one is neutral", &UmbraConfig{Enabled: true, Factor: 1.0}, true},
+		{"big factor", &UmbraConfig{Enabled: true, Factor: 5.0}, true},
+		{"factor below one", &UmbraConfig{Enabled: true, Factor: 0.5}, false},
 	}
 	for _, c := range cases {
 		h := &Handler{umbra: c.cfg}

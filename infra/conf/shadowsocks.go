@@ -118,10 +118,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 			factor = *v.Umbra.Factor
 		}
 		if !umbra.ValidFactor(factor) {
-			return nil, errors.New("invalid umbra factor: must be between 1.0 and 2.0")
-		}
-		if v.Umbra.Enabled && !umbra.ActiveFactor(factor) {
-			return nil, errors.New("umbra factor must be greater than 1.0 when enabled")
+			return nil, errors.New("invalid umbra factor: must be at least 1.0")
 		}
 		config.Umbra = &shadowsocks.UmbraConfig{
 			Enabled: v.Umbra.Enabled,
